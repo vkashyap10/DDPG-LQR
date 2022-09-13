@@ -1,0 +1,68 @@
+% run over test samples to generate ISE values for given environment and
+% method
+function score,itr_10per,itr_90per,itr_98per] = get_score_controller(environment,method)
+
+% DroneEnvironment_LQR('test');
+% DroneEnvironment_BLQR('test');
+% DroneEnvironment_BLQRPD('test');
+% DroneEnvironment_RL('test')
+
+    % add path
+    addpath('savedAgents');
+    score = zeros(4,1);
+
+    if method ~= "RL"
+        % predict using LQR
+        for i=1:2
+            IsDone = false;
+            num_itr = 0;
+            observations = environment.reset();
+            initial_value = zeros(4,1);
+            itr_10per = zeros(4,1);
+            itr_90per = zeros(4,1);
+            itr_98per = zeros(4,1);
+
+            while IsDone==false && num_itr < 20000
+                [Observation,~,IsDone,~] = environment.step();
+                score = score - abs(Observation([1:3 6]));
+
+                % store inital value to calculate rise time and settling
+                % time
+                if num_itr == 0
+                    initial_value  = Observation([1:3 6]);
+                end
+                
+                num_itr = num_itr + 1;
+
+                % check if 10 per cent reached
+                diff = (initial_value - Observation([1:3 6]))./initial_value;
+                disp(diff)
+                for k=1:len(diff)
+                    if itr_10per(k) == 0 && (diff[k] > 0.1)
+                        itr_10per(k) = num_itr;
+                    end
+                    if itr_90per(k) == 0 && (diff[k] > 0.9)
+                        itr_90per(k) = num_itr;
+                    end
+                    if itr_98per(k) == 0 && (diff[k] > 0.98)
+                        itr_98per(k) = num_itr;
+                    end
+
+                end
+            end
+        end
+    else
+        % Load all environments
+        % load saved model
+        simOpts = rlSimulationOptions('MaxSteps',20000,'NumSimulations',2);    
+        load traj_without_next_state_100itr.mat;
+        xpr = sim(environment,saved_agent,simOpts);
+        for i=1:2
+            % load first simulation
+            simdata = xpr(i).Observation.obs1.Data;
+            sum_curr = sum(squeeze(abs(simdata)),2);
+            score = score - sum_curr([1:3 6]);
+        end
+    end
+    
+end
